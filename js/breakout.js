@@ -31,10 +31,39 @@ class Breakout {
         Breakout.height = canvas.height;
         this.paddle = new Paddle(pw, ph, pc);
         this.paddle.setPosition(Breakout.width / 2, Breakout.height * 4 / 5);
+        this.paddle.setSpeed(Breakout.width / 100);
         setInterval(this.draw.apply(this), interval);
+
+        window.addEventListener('keydown', );
+        window.addEventListener('keyup', );
     }
+    keydown(evt) {
+        if (evt.keyCode === 37/*ひだりキー*/) {
+            this.leftKey = true;
+        } else if (evt.keyCode === 39/*みぎキー*/) {
+            this.rightKey = true;
+        }
+    }
+
+    keyup(evt) {
+        if (evt.keyCode === 37 /*ひだりキー*/) {
+            this.leftKey = false;
+        } else if (evt.keyCode === 39 /*みぎキー*/) {
+            this.rightKey = false;
+        }
+    }
+
+
     draw() {
         this.context.clearRect(0, 0, Breakout.withd, Breakout.height);
+        if (this.leftKey) {
+            console.log('leftKey!');
+            this.paddle.moveLeft();
+        }
+        if (this.rightKey) {
+            console.log('rightKey!');
+            this.paddle.moveRight();
+        }
         this.paddle.draw(this.context);
 
     }
@@ -77,6 +106,14 @@ class Paddle {
         this.x = x;
         this.y = y;
         this.fixPosition();
+    }
+
+    /**
+     * 移動スイードを指定する
+     * @param speed
+     */
+    setSpeed(speed) {
+        this.speed = speed;
     }
 
     /**
