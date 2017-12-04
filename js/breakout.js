@@ -1,20 +1,19 @@
 window.addEventListener('DOMContentLoaded', () => {
     console.log("breakout initializing...");
 
-    //初期化
+    // 初期化
     const canvas = document.getElementById('board');
     new Breakout({
         canvas: canvas,
-        interval: 1000 / 60, // 60 FPS
+        interval: 1000 / 60,    // 60 FPS
         paddle: {
             width: 100,
             height: 10,
-            color: '#4169e1' // 'royalblue'
+            color: '#4169e1'    // 'royalblue'
         },
-
         ball: {
             radius: 5,
-            color: 'white' // '#FFffFF'
+            color: 'white'      // '#FFffFF'
         }
     });
 });
@@ -36,7 +35,20 @@ class Breakout {
         return Breakout.gameHeight;
     }
 
+    static get isGameOver() {
+        return Breakout._game_over === true;
+    }
+
+    static setGameOver(f) {
+        if (f instanceof Boolean) {
+            Breakout._game_over = f;
+            return;
+        }
+        Breakout._game_over = true;
+    }
+
     constructor(options) {
+        // 受け取ったパラメータをプロパティに保存
         this.canvas = options.canvas;
         this.context = this.canvas.getContext('2d');
         // ゲーム画面のサイズを取得
@@ -53,9 +65,8 @@ class Breakout {
             options.paddle.height,
             options.paddle.color);
 
-        this.paddle.setPosition(Breakout.width / 2, Breakout.height * 8 / 8.5);
+        this.paddle.setPosition(Breakout.width / 2, Breakout.height * 8 / 9);
         this.paddle.setSpeed(Breakout.width / 100);
-        setInterval(this.draw.bind(this), options.interval);
 
         // ボールの初期化
         this.ball = new Ball(
@@ -101,7 +112,18 @@ class Breakout {
         if (this.rightKey) {
             this.paddle.moveRight();
         }
-        this.ball.draw(this.context);
+        if (Breakout.isGameOver) {
+            this.context.save();
+
+            this.context.fillStyle = "red";
+            this.context.font = "48pt Arial";
+            this.context.textAlign = "center";
+            this.context.fillText("GameOver", Breakout.width / 2, Breakout.height / 2);
+
+            this.context.restore();
+        } else {
+            this.ball.draw(this.context);
+        }
         this.paddle.draw(this.context);
     }
 }
@@ -205,6 +227,21 @@ class Paddle extends Entity {
             this.x -= right - Breakout.width;
         }
     }
+
+    /**
+     * 当たったあとのなにか
+     */
+    hit(ball) {
+        // ボールがPaddleの右４分の１にあるか
+        if (this.x + this.width / 4 < ball.x) {
+            ball.changeAngle();
+            return;
+        }
+        // ボールがPaddleの左４分の１にあるか
+        if (this.x - this.width / 4 > ball.x) {
+            ball.changeAngle();
+        }
+    }
 }
 
 class Ball {
@@ -262,7 +299,9 @@ class Ball {
         }
     }
 
-
+    /**
+     * 衝突判定のメソッド
+     */
     collision() {
         let isCollision = false;
         this.targetList.forEach((target) => {
@@ -270,10 +309,10 @@ class Ball {
             const points = target.getCornerPoints();
             points.forEach((point) => {
                 const a = Math.sqrt(
-                    Math.pow(this.x - point[0], 2) + Math.pow(this.y - point[1], 2));
+                    Math.pow(this.x - point.x, 2) + Math.pow(this.y - point.y, 2));
                 if (a <= this.radius) {
                     isCollision = true;
-                    target.hit();
+                    target.hit(this);
                 }
             }, this);
 
@@ -282,16 +321,37 @@ class Ball {
             const br = this.x + this.radius;
             const bt = this.y - this.radius;
             const bb = this.y + this.radius;
-            if (points[0].x < br || bl < points[1].x) {
-                if (points[0].y < bb || bt < points[2].y) {
+            if (points[0].x < br && bl < points[1].x) {
+                if (points[0].y < bb && bt < points[2].y) {
                     isCollision = true;
-                    target.hit();
+                    this.y -= bb - points[0].y;
+                    target.hit(this);
                 }
             }
 
         }, this);
 
         return isCollision;
+    }
+
+    /**
+     * 反射角度を時計回りに変える（５度）
+     */
+    changeAngle(ccw = false) {
+        let theta = Math.atan(this.dy / this.dx);
+        const speed = this.dx / Math.cos(theta);
+        if (ccw) {
+            theta -= Math.PI * 5 / 180;
+        } else {
+            theta += Math.PI * 5 / 180;
+        }
+        if (theta <= 0.7853981634 || theta >= 0.5235987756) {
+            // 変更なしにする
+            return;
+        }
+        this.dx = Math.cos(theta) * speed;
+        this.dy = Math.sin(theta) * speed;
+
     }
 
     /**
@@ -321,10 +381,8 @@ class Ball {
         }
 
         //画面下側を超えているか判定と座標修正
-        const bottom = this.y + this.radius;
-        if (bottom > Breakout.height) {
-            this.y -= bottom - Breakout.height;
-            this.reflectionY();
+        if (top > Breakout.height) {
+            Breakout.setGameOver();
         }
     }
 
