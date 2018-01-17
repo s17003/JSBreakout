@@ -1,6 +1,4 @@
 window.addEventListener('DOMContentLoaded', () => {
-    console.log("breakout initializing...");
-
     // 初期化
     const canvas = document.getElementById('board');
     new Breakout({
@@ -14,6 +12,10 @@ window.addEventListener('DOMContentLoaded', () => {
         ball: {
             radius: 5,
             color: 'white'      // '#FFffFF'
+        },
+        block: {
+            width: 80,
+            height: 20
         }
     });
 });
@@ -65,8 +67,14 @@ class Breakout {
             options.paddle.height,
             options.paddle.color);
 
-        this.paddle.setPosition(Breakout.width / 2, Breakout.height * 8 / 9);
+        this.paddle.setPosition(Breakout.width / 2,
+            Breakout.height * 8 / 9);
         this.paddle.setSpeed(Breakout.width / 100);
+
+        // ブロックマネージャーの初期化
+        this.blockManager = new BlockManager(
+            options.block.width, options.block.height);
+        this.blockManager.stage1();
 
         // ボールの初期化
         this.ball = new Ball(
@@ -75,13 +83,14 @@ class Breakout {
 
         // ボールに当たり判定してもらうおねがい
         this.ball.addTarget(this.paddle);
+        this.ball.addTarget(this.blockManager.blockList);
+
 
         // 描画の為のタイマーセット
         setInterval(this.draw.bind(this), options.interval);
 
         window.addEventListener('keydown', this.keydown.bind(this));
         window.addEventListener('keyup', this.keyup.bind(this));
-
     }
 
     keydown(evt) {
@@ -102,7 +111,6 @@ class Breakout {
             this.rightKey = false;
         }
     }
-
 
     draw() {
         this.context.clearRect(0, 0, Breakout.width, Breakout.height);
@@ -125,39 +133,51 @@ class Breakout {
             this.ball.draw(this.context);
         }
         this.paddle.draw(this.context);
+        this.blockManager.draw(this.context);
     }
 }
 
 class Entity {
-    constructor() {
-        this.x = 0;
-        this.y = 0;
-        this.width = 0;
-        this.height = 0;
+    get left() {
+        return this.x - this.width / 2;
     }
 
-    getCornerPoints() {
-        return [
-            {x: this.x - this.width /2, y: this.y - this.height / 2},
-            {x: this.x + this.width /2, y: this.y - this.height / 2},
-            {x: this.x + this.width /2, y: this.y + this.height / 2},
-            {x: this.x - this.width /2, y: this.y + this.height / 2}
-        ]
+    get top() {
+        return this.y - this.height / 2;
     }
 
-    hit() {
+    get right() {
+        return this.x + this.width / 2;
+    }
 
+    get bottom() {
+        return this.y + this.height / 2;
+    }
+
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
     }
 }
 
-class Paddle extends Entity {
+class Collideable extends Entity {
+    constructor(x, y, width, height) {
+        super(x, y, width, height);
+    }
+
+    hit(ball) {
+        const score = parseInt(document.getElementById("score").innerHTML);
+        sum = score + 10;
+        document.getElementById("score").innerHTML = sum;
+        }
+}
+
+class Paddle extends Collideable {
     constructor(width, height, color) {
-        super();
-        this.width = width;
-        this.height = height;
+        super(0, 0, width, height);
         this.color = color;
-        this.x = 0;
-        this.y = 0;
         this.speed = 0;
     }
 
@@ -174,7 +194,7 @@ class Paddle extends Entity {
         context.fillRect(-(this.width / 2), -(this.height / 2),
             this.width, this.height);
 
-        context.restore()
+        context.restore();
     }
 
     /**
@@ -215,9 +235,8 @@ class Paddle extends Entity {
     /**
      * はみ出ないように位置を調整する
      */
-
     fixPosition() {
-        const left = this.x - (this.width /2);
+        const left = this.x - (this.width / 2);
         if (left < 0) {
             this.x += Math.abs(left);
         }
@@ -239,17 +258,98 @@ class Paddle extends Entity {
         }
         // ボールがPaddleの左４分の１にあるか
         if (this.x - this.width / 4 > ball.x) {
-            ball.changeAngle();
+            ball.changeAngle(true);
         }
     }
 }
 
-class Ball {
+class Block extends Collideable {
+    static get colorSet() {
+        return [
+            ['Pink', 'Crimson'],
+            ['aqua', 'fuchsia'],
+            ['lime', 'maroon'],
+            ['olive', 'red'],
+            ['silver', 'blue'],
+            ['Brown', 'Cadeblue'],
+            ['Cornsilk', 'DarkBlue'],
+        ];
+    }
+
+    constructor(manager, x, y, width, height, color) {
+        super(x, y, width, height);
+        this.manager = manager;
+        if (color >= Block.colorSet.length) {
+            color = Block.colorSet.length - 1;
+        }
+        this.color = Block.colorSet[color];
+    }
+
+    /**
+     * 描画処理するメソッド
+     *
+     * @param context CanvasRenderingContext2D
+     */
+    draw(context) {
+        context.save();
+
+        context.translate(this.x, this.y);
+        context.fillStyle = this.color[0];
+        context.fillRect(-(this.width / 2), -(this.height / 2),
+            this.width, this.height);
+        context.lineWidth = 4;
+        context.strokeStyle = this.color[1];
+        context.strokeRect(-(this.width / 2) + 2, -(this.height / 2) + 2,
+            this.width - 4, this.height - 4);
+
+        context.restore();
+    }
+
+    /**
+     * ボールと当たったので消えます
+     */
+    hit(ball) {
+        ball.removeTarget(this);
+        this.manager.removeTarget(this);
+    }
+}
+
+class BlockManager {
+    constructor(baseWidth, baseHeight) {
+        this.baseWidth = baseWidth;
+        this.baseHeight = baseHeight;
+        this.blockList = [];
+    }
+
+    stage1() {
+        for (let x = 0; x < 7; x++) {
+            for (let y = 0; y < 6; y++) {
+                const color = parseInt(Math.random() * Block.colorSet.length);
+                this.blockList.push(
+                    new Block(this, this.baseWidth * (x + 1)
+                        , this.baseHeight * (y + 1),
+                        this.baseWidth, this.baseHeight, color));
+            }
+        }
+    }
+
+    removeTarget(object) {
+        this.blockList.splice(this.blockList.indexOf(object), 1);
+    }
+
+
+    draw(context) {
+        this.blockList.forEach((block) => {
+            block.draw(context);
+        }, this);
+    }
+}
+
+class Ball extends Entity {
     constructor(radius, color) {
+        super(0, 0, radius * 2, radius * 2);
         this.radius = radius;
         this.color = color;
-        this.x = 0;
-        this.y = 0;
         this.dx = 0;
         this.dy = 0;
         this.targetList = [];
@@ -260,14 +360,23 @@ class Ball {
      */
     addTarget(object) {
         if (Array.isArray(object)) {
-            this.targetList.concat(object);
+            for (let i in object) {
+                this.targetList.push(object[i]);
+            }
         } else {
             this.targetList.push(object);
         }
     }
 
+    removeTarget(object) {
+        let score = parseInt(document.getElementById('score').innerHTML, 10);
+        this.targetList.splice(this.targetList.indexOf(object), 1);
+        score += 10;
+        document.getElementById('score').innerHTML = score;
+    }
+
     /**
-     * 位置を指定した座標へ移動する
+     * 位置を指定した場所へ移動する
      * @param x
      * @param y
      */
@@ -294,7 +403,11 @@ class Ball {
         this.x += this.dx;
         this.y += this.dy;
 
-        if (this.collision()) {
+        const side = this.collision();
+        if ((side & 0x01) !== 0) {
+            this.dx *= -1;
+        }
+        if ((side & 0x02) !== 0) {
             this.dy *= -1;
         }
     }
@@ -303,39 +416,37 @@ class Ball {
      * 衝突判定のメソッド
      */
     collision() {
-        let isCollision = false;
+        let collideSide = 0;
         this.targetList.forEach((target) => {
-            // 角チェック
-            const points = target.getCornerPoints();
-            points.forEach((point) => {
-                const a = Math.sqrt(
-                    Math.pow(this.x - point.x, 2) + Math.pow(this.y - point.y, 2));
-                if (a <= this.radius) {
-                    isCollision = true;
-                    target.hit(this);
-                }
-            }, this);
-
-            // 各場面のチェック
-            const bl = this.x - this.radius;
-            const br = this.x + this.radius;
-            const bt = this.y - this.radius;
-            const bb = this.y + this.radius;
-            if (points[0].x < br && bl < points[1].x) {
-                if (points[0].y < bb && bt < points[2].y) {
-                    isCollision = true;
-                    this.y -= bb - points[0].y;
-                    target.hit(this);
-                }
+            if (collideSide !== 0) {
+                return false;
             }
 
+            // 各場面のチェック
+            if (target.left < this.right && this.left < target.right) {
+                if (target.top < this.bottom && this.top < target.bottom) {
+                    target.hit(this);
+                    const distanceLeft = Math.abs(target.left - this.right);
+                    const distanceTop = Math.abs(target.top - this.bottom);
+                    const distanceRight = Math.abs(target.right - this.left);
+                    const distanceBottom = Math.abs(target.bottom - this.top);
+                    const min = Math.min(distanceLeft, distanceTop, distanceRight, distanceBottom);
+
+                    if (min === distanceLeft || min === distanceRight) {
+                        collideSide += 1;
+                    }
+                    if (min === distanceTop || min === distanceBottom) {
+                        collideSide += 2;
+                    }
+                }
+            }
         }, this);
 
-        return isCollision;
+        return collideSide;
     }
 
     /**
-     * 反射角度を時計回りに変える（５度）
+     * 反射角度を変える（５度）
      */
     changeAngle(ccw = false) {
         let theta = Math.atan(this.dy / this.dx);
@@ -345,42 +456,41 @@ class Ball {
         } else {
             theta += Math.PI * 5 / 180;
         }
-        if (theta <= 0.7853981634 || theta >= 0.5235987756) {
+
+        if (theta <= -0.7853981634 || theta >= 0.5235987756) {
             // 変更なしにする
             return;
         }
         this.dx = Math.cos(theta) * speed;
         this.dy = Math.sin(theta) * speed;
-
     }
 
     /**
      * はみ出ないように位置を調整する
      */
-
     fixPosition() {
-        //画面左側を超えているか判定と座標修正
+        // 画面左側を超えてるか判定と座標修正
         const left = this.x - this.radius;
         if (left < 0) {
             this.x += Math.abs(left);
             this.reflectionX();
         }
 
-        //画面上側を超えているか判定と座標修正
+        // 画面上側を超えているか判定と座標修正
         const top = this.y - this.radius;
         if (top < 0) {
             this.y += Math.abs(top);
             this.reflectionY();
         }
 
-        //画面右側を超えているか判定と座標修正
+        // 画面右側を超えているか判定と座標修正
         const right = this.x + this.radius;
         if (right > Breakout.width) {
             this.x -= right - Breakout.width;
             this.reflectionX();
         }
 
-        //画面下側を超えているか判定と座標修正
+        // 画面下側を超えているか判定と一時的に座標修正
         if (top > Breakout.height) {
             Breakout.setGameOver();
         }
@@ -389,7 +499,6 @@ class Ball {
     /**
      * 移動スピードの左右反転
      */
-
     reflectionX() {
         this.dx *= -1;
     }
@@ -397,7 +506,6 @@ class Ball {
     /**
      * 移動スピードの上下反転
      */
-
     reflectionY() {
         this.dy *= -1;
     }
